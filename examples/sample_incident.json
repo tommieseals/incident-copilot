@@ -1,0 +1,104 @@
+{
+  "id": "inc-2024-001",
+  "title": "High Error Rate on API Gateway",
+  "description": "HTTP 500 errors increased from 0.1% to 47% on api-gateway service",
+  "severity": "critical",
+  "source": "prometheus",
+  "status": "triggered",
+  "triggered_at": "2024-01-15T10:30:00Z",
+  "labels": {
+    "service": "api-gateway",
+    "namespace": "production",
+    "deployment": "api-gateway",
+    "environment": "production",
+    "team": "platform"
+  },
+  "raw_payload": {
+    "alerts": [
+      {
+        "status": "firing",
+        "labels": {
+          "alertname": "HighErrorRate",
+          "service": "api-gateway",
+          "severity": "critical"
+        },
+        "annotations": {
+          "summary": "High error rate detected on api-gateway",
+          "description": "Error rate is 47% (threshold: 5%)"
+        },
+        "startsAt": "2024-01-15T10:30:00Z",
+        "fingerprint": "abc123"
+      }
+    ],
+    "groupKey": "api-gateway/critical",
+    "receiver": "incident-copilot"
+  },
+  "analysis": {
+    "root_cause": "Database connection pool exhaustion caused by a memory leak in the connection manager introduced in commit abc123 deployed 2 hours ago",
+    "confidence": 87,
+    "evidence": [
+      "847 occurrences of 'connection timeout' in logs between 10:28-10:32",
+      "DB connection count at 100/100 (maximum)",
+      "Error rate spike correlates with deployment of commit abc123 at 08:15",
+      "No similar issues in staging environment (using smaller pool)",
+      "Memory usage for connection manager grew from 50MB to 2GB over 2 hours"
+    ],
+    "affected_components": [
+      "api-gateway",
+      "user-service",
+      "order-service",
+      "payment-service"
+    ],
+    "timeline": [
+      {"time": "08:15:00", "event": "Deployment of commit abc123 completed"},
+      {"time": "10:28:45", "event": "First connection timeout errors appeared"},
+      {"time": "10:29:12", "event": "Connection pool reached maximum (100)"},
+      {"time": "10:30:00", "event": "Alert triggered - error rate exceeded 5%"},
+      {"time": "10:30:15", "event": "Incident Copilot started analysis"},
+      {"time": "10:31:30", "event": "Root cause identified"},
+      {"time": "10:32:00", "event": "Fix suggestions generated"}
+    ],
+    "similar_incidents": [
+      {"id": "inc-2023-234", "similarity": 92, "resolution": "Increased pool size"},
+      {"id": "inc-2023-156", "similarity": 78, "resolution": "Fixed memory leak"}
+    ]
+  },
+  "suggested_fixes": [
+    {
+      "title": "Restart API Gateway pods",
+      "description": "Rolling restart to reset connection pool state",
+      "category": "immediate",
+      "risk": "low",
+      "commands": [
+        "kubectl rollout restart deployment/api-gateway -n production"
+      ],
+      "impact": "Brief increase in latency during rolling restart",
+      "estimated_time": "2-3 minutes",
+      "confidence": 0.95
+    },
+    {
+      "title": "Rollback to previous deployment",
+      "description": "Revert to the last known good version before abc123",
+      "category": "rollback",
+      "risk": "medium",
+      "commands": [
+        "kubectl rollout undo deployment/api-gateway -n production"
+      ],
+      "impact": "Reverts any features in the problematic deployment",
+      "estimated_time": "2-3 minutes",
+      "confidence": 0.85
+    },
+    {
+      "title": "Increase connection pool size temporarily",
+      "description": "Increase max connections from 100 to 200",
+      "category": "config",
+      "risk": "medium",
+      "commands": [
+        "kubectl set env deployment/api-gateway DB_POOL_SIZE=200 -n production"
+      ],
+      "impact": "Higher load on database, verify DB can handle it",
+      "prerequisites": ["Check database max_connections setting"],
+      "confidence": 0.70
+    }
+  ]
+}
