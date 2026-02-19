@@ -1,4 +1,12 @@
-" AI Incident Analyzer - Root cause analysis using LLMs. Supports: - Ollama (local) - OpenAI - Anthropic - Azure OpenAI "
+"""
+AI Incident Analyzer - Root cause analysis using LLMs.
+
+Supports:
+- Ollama (local)
+- OpenAI
+- Anthropic
+- Azure OpenAI
+"""
 
 import asyncio
 import json
@@ -12,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class AnalysisResult:
-    "Result of AI analysis."
+    """Result of AI analysis."""
     root_cause: str
     confidence: float
     evidence: list[str]
@@ -23,43 +31,43 @@ class AnalysisResult:
 
     def to_dict(self) -> dict:
         return {
-            root_cause: self.root_cause,
-            confidence: self.confidence,
-            evidence: self.evidence,
-            similar_incidents: self.similar_incidents,
-            affected_components: self.affected_components,
-            timeline: self.timeline,
+            "root_cause": self.root_cause,
+            "confidence": self.confidence,
+            "evidence": self.evidence,
+            "similar_incidents": self.similar_incidents,
+            "affected_components": self.affected_components,
+            "timeline": self.timeline,
         }
 
 
 class AIProvider:
-    "Base class for AI providers."
+    """Base class for AI providers."""
 
-    async def complete(self, prompt: str, system: str = ") -> str:
+    async def complete(self, prompt: str, system: str = "") -> str:
         raise NotImplementedError
 
 
 class OllamaProvider(AIProvider):
-    "Ollama local LLM provider."
+    """Ollama local LLM provider."""
 
     def __init__(self, config: dict):
-        self.endpoint = config.get(endpoint, http://localhost:11434)
-        self.model = config.get(model, llama3.2:3b)
-        self.timeout = config.get(timeout, 120)
+        self.endpoint = config.get("endpoint", "http://localhost:11434")
+        self.model = config.get("model", "llama3.2:3b")
+        self.timeout = config.get("timeout", 120)
 
-    async def complete(self, prompt: str, system: str = ") -> str:
+    async def complete(self, prompt: str, system: str = "") -> str:
         import aiohttp
         
-        url = fself.endpoint/api/generate
+        url = f"{self.endpoint}/api/generate"
         
         payload = {
-            model: self.model,
-            prompt: prompt,
-            system: system,
-            stream: False,
-            options: {
-                temperature: 0.3,
-                num_predict: 2048,
+            "model": self.model,
+            "prompt": prompt,
+            "system": system,
+            "stream": False,
+            "options": {
+                "temperature": 0.3,
+                "num_predict": 2048,
             }
         }
         
@@ -72,10 +80,10 @@ class OllamaProvider(AIProvider):
                 ) as resp:
                     if resp.status != 200:
                         error = await resp.text()
-                        raise Exception(fOllama error: error)
+                        raise Exception(f"Ollama error: {error}")
                     
                     data = await resp.json()
-                    return data.get(response, ")
+                    return data.get("response", "")
         
         except ImportError:
             # Fallback to requests if aiohttp not available
@@ -83,124 +91,143 @@ class OllamaProvider(AIProvider):
             
             resp = requests.post(url, json=payload, timeout=self.timeout)
             resp.raise_for_status()
-            return resp.json().get(response, ")
+            return resp.json().get("response", "")
 
 
 class OpenAIProvider(AIProvider):
-    "OpenAI API provider."
+    """OpenAI API provider."""
 
     def __init__(self, config: dict):
-        self.api_key = config.get(api_key) or self._get_env_key()
-        self.model = config.get(model, gpt-4o-mini)
-        self.endpoint = config.get(endpoint, https://api.openai.com/v1)
+        self.api_key = config.get("api_key") or self._get_env_key()
+        self.model = config.get("model", "gpt-4o-mini")
+        self.endpoint = config.get("endpoint", "https://api.openai.com/v1")
 
     def _get_env_key(self) -> str:
         import os
-        return os.environ.get(OPENAI_API_KEY, ")
+        return os.environ.get("OPENAI_API_KEY", "")
 
-    async def complete(self, prompt: str, system: str = ") -> str:
+    async def complete(self, prompt: str, system: str = "") -> str:
         import aiohttp
         
-        url = fself.endpoint/chat/completions
+        url = f"{self.endpoint}/chat/completions"
         
         messages = []
         if system:
-            messages.append({role: system, content: system})
-        messages.append({role: user, content: prompt})
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
         
         payload = {
-            model: self.model,
-            messages: messages,
-            temperature: 0.3,
-            max_tokens: 2048,
+            "model": self.model,
+            "messages": messages,
+            "temperature": 0.3,
+            "max_tokens": 2048,
         }
         
         headers = {
-            Authorization: fBearer self.api_key,
-            Content-Type: application/json,
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
         }
         
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers) as resp:
                 if resp.status != 200:
                     error = await resp.text()
-                    raise Exception(fOpenAI error: error)
+                    raise Exception(f"OpenAI error: {error}")
                 
                 data = await resp.json()
-                return data[choices][0][message][content]
+                return data["choices"][0]["message"]["content"]
 
 
 class AnthropicProvider(AIProvider):
-    "Anthropic Claude API provider."
+    """Anthropic Claude API provider."""
 
     def __init__(self, config: dict):
-        self.api_key = config.get(api_key) or self._get_env_key()
-        self.model = config.get(model, claude-3-haiku-20240307)
+        self.api_key = config.get("api_key") or self._get_env_key()
+        self.model = config.get("model", "claude-3-haiku-20240307")
 
     def _get_env_key(self) -> str:
         import os
-        return os.environ.get(ANTHROPIC_API_KEY, ")
+        return os.environ.get("ANTHROPIC_API_KEY", "")
 
-    async def complete(self, prompt: str, system: str = ") -> str:
+    async def complete(self, prompt: str, system: str = "") -> str:
         import aiohttp
         
-        url = https://api.anthropic.com/v1/messages
+        url = "https://api.anthropic.com/v1/messages"
         
         payload = {
-            model: self.model,
-            max_tokens: 2048,
-            messages: [{role: user, content: prompt}],
+            "model": self.model,
+            "max_tokens": 2048,
+            "messages": [{"role": "user", "content": prompt}],
         }
         
         if system:
-            payload[system] = system
+            payload["system"] = system
         
         headers = {
-            x-api-key: self.api_key,
-            anthropic-version: 2023-06-01,
-            Content-Type: application/json,
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
         }
         
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers) as resp:
                 if resp.status != 200:
                     error = await resp.text()
-                    raise Exception(fAnthropic error: error)
+                    raise Exception(f"Anthropic error: {error}")
                 
                 data = await resp.json()
-                return data[content][0][text]
+                return data["content"][0]["text"]
 
 
 class IncidentAnalyzer:
-    "AI-powered incident root cause analyzer."
+    """AI-powered incident root cause analyzer."""
 
     PROVIDERS = {
-        ollama: OllamaProvider,
-        openai: OpenAIProvider,
-        anthropic: AnthropicProvider,
+        "ollama": OllamaProvider,
+        "openai": OpenAIProvider,
+        "anthropic": AnthropicProvider,
     }
 
-    SYSTEM_PROMPT = "You are an expert Site Reliability Engineer (SRE) analyzing production incidents. Your role is to identify root causes from logs, metrics, and system events. When analyzing, you should: 1. Look for error patterns and their frequency 2. Identify the timeline of events leading to the incident 3. Find correlations between different log sources 4. Consider recent deployments or configuration changes 5. Identify affected components and their dependencies Always provide: - A clear root cause hypothesis with confidence level (0-100%) - Specific evidence from the logs supporting your analysis - A timeline of events - List of affected components Be direct and technical. Focus on actionable insights."
+    SYSTEM_PROMPT = """You are an expert Site Reliability Engineer (SRE) analyzing production incidents.
+Your role is to identify root causes from logs, metrics, and system events.
+
+When analyzing, you should:
+1. Look for error patterns and their frequency
+2. Identify the timeline of events leading to the incident
+3. Find correlations between different log sources
+4. Consider recent deployments or configuration changes
+5. Identify affected components and their dependencies
+
+Always provide:
+- A clear root cause hypothesis with confidence level (0-100%)
+- Specific evidence from the logs supporting your analysis
+- A timeline of events
+- List of affected components
+
+Be direct and technical. Focus on actionable insights."""
 
     def __init__(self, config: dict):
-        "Initialize analyzer with AI provider configuration."
-        provider_name = config.get(provider, ollama).lower()
+        """Initialize analyzer with AI provider configuration."""
+        provider_name = config.get("provider", "ollama").lower()
         
         if provider_name in self.PROVIDERS:
             self.provider = self.PROVIDERS[provider_name](config)
-            logger.info(fUsing AI provider: provider_name)
+            logger.info(f"Using AI provider: {provider_name}")
         else:
-            logger.warning(fUnknown provider provider_name, defaulting to Ollama)
+            logger.warning(f"Unknown provider {provider_name}, defaulting to Ollama")
             self.provider = OllamaProvider(config)
         
-        self.max_log_lines = config.get(max_log_lines, 500)
+        self.max_log_lines = config.get("max_log_lines", 500)
 
     async def analyze(
         self,
         incident: Any,
         logs: list[str]
     ) -> dict:
-        " Analyze incident with gathered logs. Returns structured analysis result. "
+        """
+        Analyze incident with gathered logs.
+        Returns structured analysis result.
+        """
         # Prepare log context (truncate if too long)
         log_context = self._prepare_logs(logs)
         
@@ -215,29 +242,29 @@ class IncidentAnalyzer:
             result = self._parse_response(response)
             
             logger.info(
-                fAnalysis complete: result[root_cause][:50]... 
-                f(confidence: result[confidence]%)
+                f"Analysis complete: {result['root_cause'][:50]}... "
+                f"(confidence: {result['confidence']}%)"
             )
             
             return result
         
         except Exception as e:
-            logger.error(fAI analysis failed: e)
+            logger.error(f"AI analysis failed: {e}")
             return {
-                root_cause: fAnalysis failed: str(e),
-                confidence: 0,
-                evidence: [],
-                similar_incidents: [],
-                affected_components: [],
-                timeline: [],
-                error: str(e),
+                "root_cause": f"Analysis failed: {str(e)}",
+                "confidence": 0,
+                "evidence": [],
+                "similar_incidents": [],
+                "affected_components": [],
+                "timeline": [],
+                "error": str(e),
             }
 
     def _prepare_logs(self, logs: list[str]) -> str:
-        "Prepare logs for AI consumption."
+        """Prepare logs for AI consumption."""
         # Prioritize error and warning logs
-        error_logs = [l for l in logs if [ERROR] in l or [FATAL] in l]
-        warning_logs = [l for l in logs if [WARNING] in l or [WARN] in l]
+        error_logs = [l for l in logs if "[ERROR]" in l or "[FATAL]" in l]
+        warning_logs = [l for l in logs if "[WARNING]" in l or "[WARN]" in l]
         other_logs = [l for l in logs if l not in error_logs and l not in warning_logs]
         
         # Combine with priority
@@ -247,15 +274,59 @@ class IncidentAnalyzer:
         truncated = prioritized[:self.max_log_lines]
         
         if len(logs) > len(truncated):
-            truncated.append(f... ( - len(truncated)} more log entries truncated))
+            truncated.append(f"... ({len(logs) - len(truncated)} more log entries truncated)")
         
-        return n.join(truncated)
+        return "\n".join(truncated)
 
     def _build_prompt(self, incident: Any, log_context: str) -> str:
-        "Build the analysis prompt."
-        incident_info = f" ## Incident Details - **ID**: incident.id - **Title**: incident.title - **Description**: incident.description - **Severity**:  if hasattr(incident.severity, value) else incident.severity} - **Source**: incident.source - **Triggered**:  if hasattr(incident.triggered_at, isoformat) else incident.triggered_at} - **Labels**:  labels, ), indent=2)} "
+        """Build the analysis prompt."""
+        labels = getattr(incident, "labels", {})
+        severity = incident.severity.value if hasattr(incident.severity, "value") else incident.severity
+        triggered = incident.triggered_at.isoformat() if hasattr(incident.triggered_at, "isoformat") else incident.triggered_at
+        
+        incident_info = f"""
+## Incident Details
+- **ID**: {incident.id}
+- **Title**: {incident.title}
+- **Description**: {incident.description}
+- **Severity**: {severity}
+- **Source**: {incident.source}
+- **Triggered**: {triggered}
+- **Labels**: {json.dumps(labels, indent=2)}
+"""
 
-        prompt = f"Analyze the following production incident and determine the root cause. incident_info ## Collected Logs ``` log_context ``` ## Required Analysis Please provide your analysis in the following JSON format: ```json  root_cause: Clear description of the most likely root cause, confidence: 85, evidence: [ Specific log line or pattern that supports this conclusion, Another piece of evidence ], affected_components: [component1, component2], timeline: [  HH:MM:SS, event: Description of what happened}},  HH:MM:SS, event: Next event}} ], similar_incidents: [  Previous incident ID if known, similarity: 90}} ] }} ``` Focus on identifying actionable root causes. If youre uncertain, explain what additional information would help.
+        prompt = f"""Analyze the following production incident and determine the root cause.
+
+{incident_info}
+
+## Collected Logs
+```
+{log_context}
+```
+
+## Required Analysis
+Please provide your analysis in the following JSON format:
+
+```json
+{{
+  "root_cause": "Clear description of the most likely root cause",
+  "confidence": 85,
+  "evidence": [
+    "Specific log line or pattern that supports this conclusion",
+    "Another piece of evidence"
+  ],
+  "affected_components": ["component1", "component2"],
+  "timeline": [
+    {{"time": "HH:MM:SS", "event": "Description of what happened"}},
+    {{"time": "HH:MM:SS", "event": "Next event"}}
+  ],
+  "similar_incidents": [
+    {{"id": "Previous incident ID if known", "similarity": 90}}
+  ]
+}}
+```
+
+Focus on identifying actionable root causes. If you are uncertain, explain what additional information would help.
 """
         return prompt
 
@@ -271,12 +342,11 @@ class IncidentAnalyzer:
                 pass
         
         # Try to find any JSON object in the response
-        json_pattern = r"\{[^{}]*\"root_cause\"[^{}]*\}"
+        json_pattern = r'\{[^{}]*"root_cause"[^{}]*\}'
         match = re.search(json_pattern, response, re.DOTALL)
         
         if match:
             try:
-                # This might be nested, try to parse
                 return json.loads(match.group())
             except json.JSONDecodeError:
                 pass
@@ -443,4 +513,3 @@ if __name__ == "__main__":
         print(json.dumps(result, indent=2))
     
     asyncio.run(test())
-EOF"

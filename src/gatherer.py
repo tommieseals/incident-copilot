@@ -1,4 +1,14 @@
-" Log Gatherer - Multi-source log and metric collection. Supports: - Kubernetes logs and events - AWS CloudWatch - Elasticsearch - Local files - Loki (LogQL) - Git history (recent changes) "
+"""
+Log Gatherer - Multi-source log and metric collection.
+
+Supports:
+- Kubernetes logs and events
+- AWS CloudWatch
+- Elasticsearch
+- Local files
+- Loki (LogQL)
+- Git history (recent changes)
+"""
 
 import asyncio
 import glob
@@ -16,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class LogEntry:
-    "Single log entry with metadata."
+    """Single log entry with metadata."""
     timestamp: datetime
     source: str
     level: str
@@ -25,16 +35,16 @@ class LogEntry:
 
     def to_dict(self) -> dict:
         return {
-            timestamp: self.timestamp.isoformat(),
-            source: self.source,
-            level: self.level,
-            message: self.message,
-            metadata: self.metadata,
+            "timestamp": self.timestamp.isoformat(),
+            "source": self.source,
+            "level": self.level,
+            "message": self.message,
+            "metadata": self.metadata,
         }
 
 
 class LogSource(ABC):
-    "Abstract base class for log sources."
+    """Abstract base class for log sources."""
 
     @abstractmethod
     async def gather(
@@ -43,17 +53,17 @@ class LogSource(ABC):
         end_time: datetime,
         filters: dict[str, str]
     ) -> list[LogEntry]:
-        "Gather logs from this source."
+        """Gather logs from this source."""
         pass
 
 
 class KubernetesLogSource(LogSource):
-    "Gather logs from Kubernetes."
+    """Gather logs from Kubernetes."""
 
     def __init__(self, config: dict):
-        self.namespaces = config.get(namespaces, [default])
-        self.kubeconfig = config.get(kubeconfig)
-        self.context = config.get(context)
+        self.namespaces = config.get("namespaces", ["default"])
+        self.kubeconfig = config.get("kubeconfig")
+        self.context = config.get("context")
 
     async def gather(
         self,
@@ -61,7 +71,7 @@ class KubernetesLogSource(LogSource):
         end_time: datetime,
         filters: dict[str, str]
     ) -> list[LogEntry]:
-        "Gather Kubernetes logs and events."
+        """Gather Kubernetes logs and events."""
         entries = []
         
         for namespace in self.namespaces:
@@ -78,15 +88,15 @@ class KubernetesLogSource(LogSource):
         since: datetime,
         filters: dict
     ) -> list[LogEntry]:
-        "Get logs from pods in a namespace."
+        """Get logs from pods in a namespace."""
         entries = []
         since_seconds = int((datetime.utcnow() - since).total_seconds())
         
         try:
             # Get pods
-            cmd = [kubectl, get, pods, -n, namespace, -o, json]
+            cmd = ["kubectl", "get", "pods", "-n", namespace, "-o", "json"]
             if self.context:
-                cmd.extend([--context, self.context])
+                cmd.extend(["--context", self.context])
             
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -97,25 +107,25 @@ class KubernetesLogSource(LogSource):
             pods_data = json.loads(stdout)
             
             # Get logs from each pod
-            for pod in pods_data.get(items, []):
-                pod_name = pod[metadata][name]
+            for pod in pods_data.get("items", []):
+                pod_name = pod["metadata"]["name"]
                 
                 # Check if pod matches filters
-                if filters.get(pod) and filters[pod] not in pod_name:
+                if filters.get("pod") and filters["pod"] not in pod_name:
                     continue
                 
-                for container in pod.get(spec, {}).get(containers, []):
-                    container_name = container[name]
+                for container in pod.get("spec", {}).get("containers", []):
+                    container_name = container["name"]
                     
                     log_cmd = [
-                        kubectl, logs, pod_name,
-                        -n, namespace,
-                        -c, container_name,
-                        f--since=since_secondss,
-                        --timestamps
+                        "kubectl", "logs", pod_name,
+                        "-n", namespace,
+                        "-c", container_name,
+                        f"--since={since_seconds}s",
+                        "--timestamps"
                     ]
                     if self.context:
-                        log_cmd.extend([--context, self.context])
+                        log_cmd.extend(["--context", self.context])
                     
                     try:
                         log_proc = await asyncio.create_subprocess_exec(
@@ -125,7 +135,7 @@ class KubernetesLogSource(LogSource):
                         )
                         log_stdout, _ = await log_proc.communicate()
                         
-                        for line in log_stdout.decode().strip().split(n):
+                        for line in log_stdout.decode().strip().split("\n"):
                             if not line:
                                 continue
                             
@@ -135,21 +145,21 @@ class KubernetesLogSource(LogSource):
                             if entry:
                                 entries.append(entry)
                     except Exception as e:
-                        logger.warning(fFailed to get logs from pod_name: e)
+                        logger.warning(f"Failed to get logs from {pod_name}: {e}")
         
         except Exception as e:
-            logger.error(fFailed to gather K8s logs from namespace: e)
+            logger.error(f"Failed to gather K8s logs from {namespace}: {e}")
         
         return entries
 
     async def _get_events(self, namespace: str, since: datetime) -> list[LogEntry]:
-        "Get Kubernetes events."
+        """Get Kubernetes events."""
         entries = []
         
         try:
-            cmd = [kubectl, get, events, -n, namespace, -o, json]
+            cmd = ["kubectl", "get", "events", "-n", namespace, "-o", "json"]
             if self.context:
-                cmd.extend([--context, self.context])
+                cmd.extend(["--context", self.context])
             
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -159,21 +169,21 @@ class KubernetesLogSource(LogSource):
             stdout, _ = await proc.communicate()
             events_data = json.loads(stdout)
             
-            for event in events_data.get(items, []):
+            for event in events_data.get("items", []):
                 event_time = datetime.fromisoformat(
-                    event.get(lastTimestamp, ").replace(Z, +00:00)
-                ) if event.get(lastTimestamp) else datetime.utcnow()
+                    event.get("lastTimestamp", "").replace("Z", "+00:00")
+                ) if event.get("lastTimestamp") else datetime.utcnow()
                 
                 if event_time < since:
                     continue
                 
-                level = warning if event.get(type) == Warning else info
+                level = "warning" if event.get("type") == "Warning" else "info"
                 
                 entries.append(LogEntry(
                     timestamp=event_time,
-                    source=fk8s-event/namespace,
+                    source=f"k8s-event/{namespace}",
                     level=level,
-                    message=f[ Unknown)}]  )}",
+                    message=f"[{event.get('reason', 'Unknown')}] {event.get('message', '')}",
                     metadata={
                         "kind": event.get("involvedObject", {}).get("kind"),
                         "name": event.get("involvedObject", {}).get("name"),
@@ -409,4 +419,130 @@ class ElasticsearchLogSource(LogSource):
         try:
             import aiohttp
             
-            q
+            query = {
+                "query": {
+                    "bool": {
+                        "must": [
+                            {
+                                "range": {
+                                    "@timestamp": {
+                                        "gte": start_time.isoformat(),
+                                        "lte": end_time.isoformat()
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                },
+                "sort": [{"@timestamp": "desc"}],
+                "size": 1000
+            }
+            
+            url = f"http://{self.host}/{self.index_pattern}/_search"
+            
+            headers = {"Content-Type": "application/json"}
+            auth = None
+            if self.auth:
+                import aiohttp
+                auth = aiohttp.BasicAuth(
+                    self.auth.get("username", ""),
+                    self.auth.get("password", "")
+                )
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=query, headers=headers, auth=auth) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        for hit in data.get("hits", {}).get("hits", []):
+                            source = hit.get("_source", {})
+                            entries.append(LogEntry(
+                                timestamp=datetime.fromisoformat(
+                                    source.get("@timestamp", "").replace("Z", "+00:00")
+                                ),
+                                source=f"es/{hit.get('_index', 'unknown')}",
+                                level=source.get("level", "info").lower(),
+                                message=source.get("message", str(source)),
+                                metadata=source
+                            ))
+        
+        except ImportError:
+            logger.warning("aiohttp not installed, skipping Elasticsearch")
+        except Exception as e:
+            logger.error(f"Failed to query Elasticsearch: {e}")
+        
+        return entries
+
+
+class LogGatherer:
+    """Main log gathering orchestrator."""
+
+    SOURCE_TYPES = {
+        "kubernetes": KubernetesLogSource,
+        "k8s": KubernetesLogSource,
+        "file": FileLogSource,
+        "git": GitHistorySource,
+        "elasticsearch": ElasticsearchLogSource,
+        "es": ElasticsearchLogSource,
+    }
+
+    def __init__(self, sources_config: list[dict]):
+        """Initialize with list of source configurations."""
+        self.sources: list[LogSource] = []
+        
+        for config in sources_config:
+            source_type = config.get("type", "").lower()
+            if source_type in self.SOURCE_TYPES:
+                self.sources.append(self.SOURCE_TYPES[source_type](config))
+                logger.info(f"Configured log source: {source_type}")
+            else:
+                logger.warning(f"Unknown log source type: {source_type}")
+
+    async def gather_logs(
+        self,
+        incident: Any,
+        time_range_minutes: int = 60
+    ) -> list[str]:
+        """
+        Gather logs from all configured sources.
+        
+        Returns list of formatted log lines for analysis.
+        """
+        end_time = datetime.utcnow()
+        start_time = end_time - timedelta(minutes=time_range_minutes)
+        
+        # Build filters from incident
+        filters = {}
+        if hasattr(incident, "labels"):
+            filters.update(incident.labels)
+        
+        # Gather from all sources concurrently
+        all_entries: list[LogEntry] = []
+        
+        tasks = [
+            source.gather(start_time, end_time, filters)
+            for source in self.sources
+        ]
+        
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            for result in results:
+                if isinstance(result, Exception):
+                    logger.error(f"Log gathering failed: {result}")
+                else:
+                    all_entries.extend(result)
+        
+        # Sort by timestamp
+        all_entries.sort(key=lambda x: x.timestamp)
+        
+        # Format as log lines
+        log_lines = []
+        for entry in all_entries:
+            level_tag = f"[{entry.level.upper()}]"
+            log_lines.append(
+                f"[{entry.timestamp.isoformat()}] [{entry.source}] {level_tag} {entry.message}"
+            )
+        
+        logger.info(f"Gathered {len(log_lines)} log entries from {len(self.sources)} sources")
+        
+        return log_lines
